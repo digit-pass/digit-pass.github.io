@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Portal</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js"></script>
+</head>
+
+<body>
+    <header>
+        <div id="top-bar">
+            <a href="./index.html" id="logo-container-link"><img id="logo" src="resources/logo.png"
+                    alt="emojipass Logo"></a>
+            <nav>
+                <ul>
+                    <a href="./index.html" class="nav-link">
+                        <p>Home</p>
+                    </a>
+                    <a href="./admin.html" class="nav-link experiment-hidden-toggle">
+                        <p>Admin</p>
+                    </a>
+                </ul>
+            </nav>
+            <div id="register-login-widget">
+                <a href="./login.html" class="nav-link">
+                    <p>Login</p>
+                </a>
+                <a href="./register.html" class="nav-link">
+                    <p>Register</p>
+                </a>
+            </div>
+            <button id="hamburger-menu" class="hamburger-menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+        <div id="mobile-menu" class="mobile-menu">
+            <a href="./login.html" class="mobile-nav-link mobile-login-link">
+                <p>Login</p>
+            </a>
+            <a href="./register.html" class="mobile-nav-link mobile-register-link">
+                <p>Register</p>
+            </a>
+            <a href="./account.html" class="mobile-nav-link mobile-account-link" style="display: none;">
+                <p>My Account</p>
+            </a>
+            <a href="./index.html" class="mobile-nav-link">
+                <p>Home</p>
+            </a>
+            <a href="./admin.html" class="mobile-nav-link experiment-hidden-toggle active-page">
+                <p>Admin</p>
+            </a>
+        </div>
+        <script>updateHeader();</script>
+    </header>
+    <main class="container">
+        <h1>Admin Portal</h1>
+        <p id="login-hint" class="hint">Toggle the local admin settings for the site.</p>
+
+        <img class="small-image" src="./resources/admin-banner.svg">
+
+        <section class="card">
+            <h3>Toggle Experiment Mode</h3>
+            <p class="hint">Configure whether the system is primed for experiments - this will hide the admin panel option from the user.</p>
+
+            <div class="actions">
+                <button id="experiment-off" class="ghost" onclick="toggleExperimentStatus(false)">Experiment Off</button>
+                <button id="experiment-on" class="primary" onclick="toggleExperimentStatus(true)">Experiment On</button>
+            </div>
+
+            <h3>Set Password Type</h3>
+            <p class="hint">Select the password type for the participant. </p>
+
+            <div class="actions">
+                <button id="emoji-mode" class="ghost" onclick="saveExperimentCondition('emoji')">Emoji</button>
+                <button id="digits-mode" class="primary" onclick="saveExperimentCondition('digits')">Digits</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>Storage Mode</h3>
+            <p class="hint">Select where user data is stored. Hybrid mode tries Firebase first, falls back to LocalStorage.</p>
+
+            <div class="actions">
+                <button id="storage-local" class="ghost" onclick="setStorageMode('local')">Local Only</button>
+                <button id="storage-hybrid" class="primary" onclick="setStorageMode('hybrid')">Hybrid (Recommended)</button>
+                <button id="storage-firebase" class="ghost" onclick="setStorageMode('firebase')">Firebase Only</button>
+            </div>
+
+            <p id="storage-status" class="hint" style="margin-top: 1rem;">Current mode: <strong id="current-storage-mode">hybrid</strong></p>
+        </section>
+    </main>
+
+    <!-- Firebase SDK (Realtime Database) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- Storage Module with Firebase fallback -->
+    <script src="storage.js"></script>
+    <script src="firebase-config.js"></script>
+    
+    <!-- Main App -->
+    <script>updatePage();</script>
+</body>
+
+</html>
