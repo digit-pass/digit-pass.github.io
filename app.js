@@ -142,7 +142,7 @@ const isLoggedIn = () => {
 
 const isEmojiMode = () => {
   const raw = localStorage.getItem(EXPERIMENT_CONDITION_KEY);
-  if (!raw) return true;
+  if (!raw) return EMOJI_MODE_DEFAULT;
   try {
     return JSON.parse(raw) === "emoji";
   } catch {
