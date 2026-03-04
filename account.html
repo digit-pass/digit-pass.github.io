@@ -64,10 +64,16 @@
     <div class="actions">
       <button id="logout" class="primary" onclick="logout()">Logout</button>
     </div>
+    <div id="secret-emoji-container">
+      <br>
+      <p id="login-hint" class="hint">Below is your <b>secret emoji</b> for this task.</p>
+      <p id="secret-emoji"></p>
+    </div>
   </main>
 
   <!-- Firebase SDK (Realtime Database) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   
   <!-- Storage Module with Firebase fallback -->
