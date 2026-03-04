@@ -3,14 +3,14 @@ const PIN_LENGTH = 4;
 const MAX_EMOJI_REPEAT = 2;
 const EMOJI_KEYPAD_SIZE = 10;
 const EMOJI_LISTS = {
-  smileys: ["😁", "🤣", "😅", "😊", "😎", "😍", "😘", "🤔", "😴", "😡", "🤯", "🥳", ],
-  objects: ["📚", "🔒", "💡", "📱", "🎒", "🧭"],
-  places: ["🏠",  "🏥", "🗽", "🗼", "🗻", "🌋",],
-  nature: ["🌞", "🌧", "🌈", "🔥", "🌙", "⭐", "🌸"]
+  smileys: ["😁", "🤣", "🤔", "😡", "😎", "😍", "😘", "😴", "🤯", "🥳", ],
+  objects: ["🧭", "📱", "💡", "🔒", "🎒", "📚"],
+  places: ["🏠",  "🗻", "🗽", "🗼", "🌋",],
+  nature: ["🌞", "🌈", "🔥", "🌙", "⭐", "🌸"]
 };
 // Keyboard ratio across categories (must sum to 10).
 // If you want fully random from all emojis, set USE_CATEGORY_RATIO to false.
-const KEYPAD_CATEGORY_RATIO = { smileys: 3, objects: 3, places: 2, nature: 2 };
+const KEYPAD_CATEGORY_RATIO = { smileys: 4, objects: 2, places: 2, nature: 2 };
 const USE_CATEGORY_RATIO = true;
 const EMOJI_LIST = Object.values(EMOJI_LISTS).flat();
 
@@ -18,6 +18,7 @@ const STORAGE_KEY = "hcs_emoji_auth";
 const LOGIN_STATE_KEY = "hcs_logged_in";
 const EXPERIMENT_STATUS_KEY = "hcs_experiment_mode"
 const EXPERIMENT_CONDITION_KEY = 'hcs_experiment_condition';
+const TASK_NUMBER_KEY = "hcs_task_number"
 const EMOJI_MODE_DEFAULT = false;
 const EXPERIMENT_MODE_DEFAULT = true;
 const CENSOR_CHAR = "●";
@@ -62,6 +63,29 @@ const generateEmojiKeyboard = () => {
   return shuffleArray(keys).slice(0, EMOJI_KEYPAD_SIZE);
 };
 
+// Build the deterministic keyboard used in experiment mode:
+// pick the first N emojis from each category and keep this order.
+const generateFixedExperimentKeyboard = () => {
+  const keys = [];
+
+  if (!USE_CATEGORY_RATIO) {
+    return EMOJI_LIST.slice(0, EMOJI_KEYPAD_SIZE);
+  }
+
+  Object.entries(KEYPAD_CATEGORY_RATIO).forEach(([category, count]) => {
+    const list = EMOJI_LISTS[category] || [];
+    keys.push(...list.slice(0, count));
+  });
+
+  if (keys.length < EMOJI_KEYPAD_SIZE) {
+    const used = new Set(keys);
+    const extras = EMOJI_LIST.filter((emoji) => !used.has(emoji)).slice(0, EMOJI_KEYPAD_SIZE - keys.length);
+    keys.push(...extras);
+  }
+
+  return keys.slice(0, EMOJI_KEYPAD_SIZE);
+};
+
 // Save registration payload using storage module (Firebase + LocalStorage fallback).
 const saveRegistration = async (payload) => {
   if (window.StorageModule) {
@@ -75,9 +99,9 @@ const saveRegistration = async (payload) => {
 };
 
 // Read and parse registration payload using storage module (Firebase + LocalStorage fallback).
-const readRegistration = async (participantId = null) => {
+const readRegistration = async (username = null, preferredPasswordType = null) => {
   if (window.StorageModule) {
-    const result = await window.StorageModule.getUser(participantId);
+    const result = await window.StorageModule.getUser(username, preferredPasswordType);
     return result.success ? result.data : null;
   } else {
     // Fallback to direct localStorage if module not loaded
@@ -140,6 +164,30 @@ const isLoggedIn = () => {
   }
 };
 
+// TODO: Set task number
+const saveTaskNumber = (payload) => {
+  localStorage.setItem(TASK_NUMBER_KEY, JSON.stringify(payload));
+}
+
+// TODO: Increment task number
+const incrementTaskNumber = () => {
+  var taskNumber = getTaskNumber();
+  taskNumber++;
+  saveTaskNumber(taskNumber);
+}
+
+// TODO: Get task number from localstorage
+const getTaskNumber = () => {
+  const raw = localStorage.getItem(TASK_NUMBER_KEY);
+  if (!raw) return 0;
+  try {
+    return parseInt(JSON.parse(raw));
+  } catch {
+    // default to emoji mode default
+    return 0;
+  }  
+}
+
 const isEmojiMode = () => {
   const raw = localStorage.getItem(EXPERIMENT_CONDITION_KEY);
   if (!raw) return EMOJI_MODE_DEFAULT;
@@ -155,15 +203,10 @@ const isEmojiMode = () => {
 const getEmojiPool = () => {
   if (!isExperiment()) return EMOJI_LIST; // use all emoji if under experiment off
 
-  const stored = localStorage.getItem(FIXED_KEYPAD_KEY);
-  if (stored) {
-    return JSON.parse(stored); // if already fixed then return 
-  }
-
-  // Experiment ON: create one fixed 10-key keyboard (uses current category ratio settings).
-  const newPool = generateEmojiKeyboard();
-  localStorage.setItem(FIXED_KEYPAD_KEY, JSON.stringify(newPool));
-  return newPool;
+  // Experiment ON: always same 10 emojis, same order.
+  const fixedPool = generateFixedExperimentKeyboard();
+  localStorage.setItem(FIXED_KEYPAD_KEY, JSON.stringify(fixedPool));
+  return fixedPool;
 };
 
 const getExperimentCondition = () => {
@@ -174,6 +217,10 @@ const getExperimentCondition = () => {
     return "digits";
   }
 }
+
+const isValidUsername = (username) => {
+  return /^[A-Za-z0-9 _-]{3,64}$/.test(username);
+};
 
 // Generate a random numeric PIN (digits can repeat).
 const randomDigitPin = () => {
@@ -292,6 +339,26 @@ const updatePageByLogin = () => {
     }
   }
 };
+
+// TODO: Display emoji key
+const updateAccountPageByExperimentStatus = () => {
+  const secretEmojiContainer = document.getElementById("secret-emoji-container");
+  if (!secretEmojiContainer) return;
+
+  const secretEmoji = document.getElementById("secret-emoji");
+  if (!secretEmojiContainer) return;
+
+  if (isExperiment() && getTaskNumber() >= 2) {
+    secretEmojiContainer.style.display="block";
+
+    if (getTaskNumber() == 2) {
+      secretEmoji.innerHTML = "🐶";
+    }
+    else if (getTaskNumber() > 2) {
+      secretEmoji.innerHTML = "🐒";
+    }
+  }
+}
 
 const updateAdminPageByExperimentStatus = () => {
   const experimentOnLabel = document.getElementById("experiment-on");
@@ -444,7 +511,7 @@ const setupRegisterPage = () => {
     if (targetRadio) targetRadio.checked = true; // auto check this button
   }
 
-  const participantInput = document.getElementById("participant-id");
+  const usernameInput = document.getElementById("username");
   const confirmSec = document.getElementById("confirm-passcode");
 
   const confirmDisplay = document.getElementById("confirm-display");
@@ -466,12 +533,12 @@ const setupRegisterPage = () => {
 
   const updateRegButtonState = () => {
     //id can't be spaces
-    const isValid = participantInput.value.trim().length > 0; 
+    const isValid = usernameInput.value.trim().length > 0; 
     generateBtn.disabled = !isValid;
   };
 
-  if (participantInput && generateBtn) {
-    participantInput.addEventListener("input", updateRegButtonState);
+  if (usernameInput && generateBtn) {
+    usernameInput.addEventListener("input", updateRegButtonState);
     
     //load once incase of autofill or if user went back a page
     updateRegButtonState(); 
@@ -482,14 +549,24 @@ const setupRegisterPage = () => {
     event.preventDefault();
     const formData = new FormData(form);
     const passwordType = formData.get("password-type");
-    const participantId = (participantInput?.value || "").trim();
+    const username = (usernameInput?.value || "").trim();
+
+    if (!username) {
+      alert("Username is required for experiment tracking.");
+      return;
+    }
+
+    if (!isValidUsername(username)) {
+      alert("Username must be 3-64 chars and only use letters, numbers, spaces, '_' or '-'.");
+      return;
+    }
 
     const generatedKeypad = passwordType === "emoji"
       ? (isExperiment() ? getEmojiPool() : generateEmojiKeyboard())
       : null;
     const generatedPassword = passwordType === "emoji" ? randomEmojiPin(generatedKeypad) : randomDigitPin();
     pendingRegistration = {
-      participant_id: participantId,
+      username,
       password_type: passwordType,
       generated_password: generatedPassword,
       generated_keypad: generatedKeypad,
@@ -532,8 +609,22 @@ const setupRegisterPage = () => {
       const saveResult = await saveRegistration(pendingRegistration);
       
       if (saveResult.success) {
-        confirmMessage.textContent = "Success! Account registered.";
-        confirmMessage.className = "message success";
+        // TODO: SET TASK TO 1
+        saveTaskNumber(1);
+        const currentStorageMode = window.StorageModule ? window.StorageModule.getStorageMode() : "local";
+        if (saveResult.storage === "firebase" || saveResult.storage === "both") {
+          confirmMessage.textContent = "Success! Account registered to Firebase.";
+          confirmMessage.className = "message success";
+        } else if (currentStorageMode === "local") {
+          confirmMessage.textContent = "Saved in Local mode only (Firebase disabled in admin settings).";
+          confirmMessage.className = "message error";
+        } else if (saveResult.storage === "local") {
+          confirmMessage.textContent = "Registered locally only (Firebase save failed). Check internet/auth/rules and try again.";
+          confirmMessage.className = "message error";
+        } else {
+          confirmMessage.textContent = "Success! Account registered.";
+          confirmMessage.className = "message success";
+        }
         goLoginBtn.disabled = false;
         
         confirmKeypad.innerHTML = ""; //shut down keypad, no typing after success
@@ -575,23 +666,21 @@ const setupLoginPage = async () => {
   const keypad = document.getElementById("keypad");
   const inputDisplay = document.getElementById("input-display");
   const meta = document.getElementById("input-meta");
+  const passwordInputRow = document.getElementById("password-input-row");
   const message = document.getElementById("message");
   const clearBtn = document.getElementById("clear");
   const loginBtn = document.getElementById("login");
+  const loginActions = document.getElementById("login-actions");
   const hint = document.getElementById("login-hint");
+  const usernameInput = document.getElementById("login-username");
+  const loadUsernameBtn = document.getElementById("load-username");
 
-  const registration = await readRegistration();
-  if (!registration) {
-    hint.textContent = "No registration found. Please register first.";
-    panel.classList.add("hidden");
-    message.classList.remove("hidden");
-    message.textContent = "Generate a password on the registration page first.";
-    message.classList.add("error");
-    return;
-  }
-
-  const passwordType = getExperimentCondition();
+  let passwordType = getExperimentCondition();
   let currentInput = [];
+  let attemptStartedAt = Date.now();
+  let inputTapCount = 0;
+  let activeRegistration = null;
+  let passwordEntryUnlocked = false;
 
   const renderInput = () => {
     inputDisplay.textContent = formatInputDisplay(currentInput);
@@ -599,8 +688,10 @@ const setupLoginPage = async () => {
   };
 
   const handleKey = (value) => {
+    if (!passwordEntryUnlocked) return;
     if (currentInput.length >= PIN_LENGTH) return;
     currentInput = currentInput.concat(value);
+    inputTapCount += 1;
     renderInput();
   };
 
@@ -612,6 +703,8 @@ const setupLoginPage = async () => {
 
   const clearAll = () => {
     currentInput = [];
+    inputTapCount = 0;
+    attemptStartedAt = Date.now();
     renderInput();
   };
 
@@ -621,16 +714,119 @@ const setupLoginPage = async () => {
     message.classList.add(type);
   };
 
-  keypad.innerHTML = "";
-  keypad.classList.add(passwordType === "emoji" ? "emoji" : "digits");
+  const setPasswordEntryVisible = (isVisible) => {
+    const shouldShow = Boolean(isVisible);
+    passwordEntryUnlocked = shouldShow;
 
-  const storedPassword = registration.generated_password || "";
-  const storedKeypad = Array.isArray(registration.generated_keypad) ? registration.generated_keypad : null;
-  fillKeypad(passwordType, keypad, handleKey, storedPassword, storedKeypad)
+    if (passwordInputRow) {
+      passwordInputRow.classList.toggle("hidden", !shouldShow);
+    }
+
+    if (keypad) {
+      keypad.classList.toggle("hidden", !shouldShow);
+    }
+
+    if (loginActions) {
+      loginActions.classList.toggle("hidden", !shouldShow);
+    }
+  };
+
+  const queryRegistrationByUsername = async (username, preferredPasswordType) => {
+    if (window.StorageModule && window.StorageModule.firebase && typeof window.StorageModule.firebase.get === "function") {
+      const result = await window.StorageModule.firebase.get(username, preferredPasswordType);
+      return result && result.success ? result.data : null;
+    }
+
+    return readRegistration(username, preferredPasswordType);
+  };
+
+  const loadRegistrationByUsername = async () => {
+    const enteredUsername = (usernameInput?.value || "").trim();
+    if (!enteredUsername || !isValidUsername(enteredUsername)) {
+      setPasswordEntryVisible(false);
+      showMessage("Incorrect username.", "error");
+      return false;
+    }
+
+    const registration = await queryRegistrationByUsername(enteredUsername, passwordType);
+    if (!registration) {
+      activeRegistration = null;
+      setPasswordEntryVisible(false);
+      showMessage("Incorrect username.", "error");
+      return false;
+    }
+
+    const storedPasswordByType = registration?.passwords && typeof registration.passwords === "object"
+      ? registration.passwords[passwordType]
+      : null;
+
+    const hasPasswordForRequestedType = Boolean(
+      storedPasswordByType && typeof storedPasswordByType.generated_password === "string"
+        ? storedPasswordByType.generated_password
+        : registration.password_type === passwordType && typeof registration.generated_password === "string"
+          ? registration.generated_password
+          : ""
+    );
+
+    if (!hasPasswordForRequestedType) {
+      activeRegistration = null;
+      setPasswordEntryVisible(false);
+      const modeLabel = passwordType === "digits" ? "DigitPass" : "EmojiPass";
+      showMessage(`This username is not registered for ${modeLabel} mode.`, "error");
+      return false;
+    }
+
+    const storedPassword = typeof storedPasswordByType?.generated_password === "string"
+      ? storedPasswordByType.generated_password
+      : typeof registration.generated_password === "string"
+        ? registration.generated_password
+        : "";
+    const storedKeypad = Array.isArray(registration?.meta?.generated_keypad)
+      ? registration.meta.generated_keypad
+      : Array.isArray(registration.generated_keypad)
+        ? registration.generated_keypad
+        : null;
+
+    fillKeypad(passwordType, keypad, handleKey, storedPassword, storedKeypad);
+    currentInput = [];
+    attemptStartedAt = Date.now();
+    inputTapCount = 0;
+    renderInput();
+
+    activeRegistration = {
+      username: enteredUsername,
+      password: storedPassword,
+      passwordType,
+    };
+
+    setPasswordEntryVisible(true);
+    showMessage("User loaded. Enter password and click Login.", "success");
+    return true;
+  };
+
+  keypad.innerHTML = "";
+  keypad.className = `keypad ${passwordType}`;
+  setPasswordEntryVisible(false);
 
   clearBtn.addEventListener("click", clearAll);
+  if (loadUsernameBtn) {
+    loadUsernameBtn.addEventListener("click", async () => {
+      await loadRegistrationByUsername();
+    });
+  }
 
   document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    const isTypingField = target && (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable
+    );
+
+    if (isTypingField) {
+      return;
+    }
+
     if (event.key === "Backspace") {
       event.preventDefault();
       backspace();
@@ -641,38 +837,83 @@ const setupLoginPage = async () => {
       clearAll();
       return;
     }
-    if (passwordType === "digits" && /^[0-9]$/.test(event.key)) {
-      pushInput(event.key);
+    if (passwordEntryUnlocked && passwordType === "digits" && /^[0-9]$/.test(event.key)) {
+      handleKey(event.key);
     }
   });
 
   loginBtn.addEventListener("click", async () => {
-    if (currentInput.length !== PIN_LENGTH) {
-      showMessage(`Please enter ${PIN_LENGTH} characters`, "error");
+    const enteredUsername = (usernameInput?.value || "").trim();
+    if (!activeRegistration || activeRegistration.username !== enteredUsername) {
+      showMessage("Load user details first.", "error");
       return;
     }
+
+    if (currentInput.length !== PIN_LENGTH) {
+      showMessage("Incorrect password.", "error");
+      const analyticsPayload = {
+        success: false,
+        condition: activeRegistration.passwordType,
+        num_inputs: inputTapCount,
+        duration_ms: Date.now() - attemptStartedAt,
+      };
+      if (window.StorageModule) {
+        await window.StorageModule.recordLoginAttempt(enteredUsername, analyticsPayload);
+      }
+      return;
+    }
+
     const inputValue = currentInput.join("");
-    const isCorrect = inputValue === registration.generated_password;
+    const isCorrect = inputValue === activeRegistration.password;
+    const durationMs = Date.now() - attemptStartedAt;
+    const analyticsPayload = {
+      success: isCorrect,
+      condition: activeRegistration.passwordType,
+      num_inputs: inputTapCount,
+      duration_ms: durationMs,
+    };
     
     if (isCorrect) {
       saveLoginState(true);
+      // TODO: INCREMENT TASK NUMBER
+      if (getTaskNumber() > 0) {
+        incrementTaskNumber();
+      }
       updatePageByLogin();
       showMessage("Login successful ✅", "success");
       
       // Record successful login attempt (for analytics)
-      if (window.StorageModule && registration.participant_id) {
-        await window.StorageModule.recordLoginAttempt(registration.participant_id, true);
+      if (window.StorageModule) {
+        await window.StorageModule.recordLoginAttempt(enteredUsername, analyticsPayload);
       }
     } else {
-      showMessage("Incorrect password, try again.", "error");
-      clearAll();
+      showMessage("Incorrect password.", "error");
       
       // Record failed login attempt (for analytics)
-      if (window.StorageModule && registration.participant_id) {
-        await window.StorageModule.recordLoginAttempt(registration.participant_id, false);
+      if (window.StorageModule) {
+        await window.StorageModule.recordLoginAttempt(enteredUsername, analyticsPayload);
       }
+
+      clearAll();
     }
   });
+
+  if (usernameInput) {
+    usernameInput.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        await loadRegistrationByUsername();
+      }
+    });
+
+    usernameInput.addEventListener("input", () => {
+      activeRegistration = null;
+      setPasswordEntryVisible(false);
+      clearAll();
+    });
+  }
+
+  hint.textContent = "Enter username, click Next, then enter password and click Login.";
 
   renderInput();
 };
@@ -712,4 +953,5 @@ const updatePage = () => {
   updateAdminPageByExperimentStatus();
   updateAdminPageByStorageMode();
   setupStorageMode();
+  updateAccountPageByExperimentStatus();
 }
